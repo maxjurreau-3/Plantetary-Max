@@ -12,7 +12,12 @@ Validates:
 """
 
 import sys
+from pathlib import Path
 from typing import Dict, Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 # Import system layers
 try:
@@ -21,7 +26,7 @@ try:
     from kernel.invariants import InvariantChecker
     from cognitive.sim_core import SIMCore
     from cognitive.sim_state import SIMState
-    from cognitive.sim_trajectory import SIMTrajectory
+    from cognitive.sim_trajectory import SIMTrajectory, StepType
     from cognitive.sim_compute import SIMCompute
     from tec.pipeline import TECPipeline
     from tec.agent import TECAgent, AgentCapability

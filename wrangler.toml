@@ -1,0 +1,6 @@
+name = "portal-os-rebuild-2"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Bind a Python kernel service as KERNEL_SERVICE in production. KERNEL_URL is
+# also supported for a separately deployed HTTP adapter.

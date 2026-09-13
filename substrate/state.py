@@ -6,7 +6,7 @@ Models the substrate layer: Durable Objects (DO) + Cloudflare KV.
 Ensures state coherence and handles eventual consistency.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
 import time
