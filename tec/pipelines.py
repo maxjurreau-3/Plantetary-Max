@@ -1,0 +1,53 @@
+"""Bounded TEC task pipeline and MAX-OS-1 surface wiring."""
+
+import time
+from typing import Any, Dict, Mapping
+
+from maxos_bridge import get_umbrella_status, get_universe_state, start_universe, tick_universe
+from tec.surfaces import SubstrateSurface
+
+
+class TECPipeline:
+    def __init__(self, substrate_surface: SubstrateSurface, timeout_ms: int = 100, max_steps: int = 16) -> None:
+        self.substrate_surface = substrate_surface
+        self.timeout_ms = timeout_ms
+        self.max_steps = max_steps
+
+    def execute(self, task: Mapping[str, Any]) -> Dict[str, Any]:
+        started = time.monotonic()
+        actions = task.get("actions")
+        if actions is None:
+            actions = [task]
+        if not isinstance(actions, list) or len(actions) > self.max_steps:
+            raise RuntimeError("TEC Execution Bounded invariant violated")
+        results = []
+        for index, action in enumerate(actions):
+            if not isinstance(action, Mapping):
+                raise ValueError("TEC action must be an object")
+            if (time.monotonic() - started) * 1000 > self.timeout_ms:
+                raise TimeoutError("TEC execution exceeded its time budget")
+            results.append({"step": index, "result": self._execute_one(action)})
+            if (time.monotonic() - started) * 1000 > self.timeout_ms:
+                raise TimeoutError("TEC execution exceeded its time budget")
+        return {
+            "status": "complete",
+            "steps": len(results),
+            "durationMs": round((time.monotonic() - started) * 1000, 3),
+            "results": results,
+        }
+
+    def _execute_one(self, task: Mapping[str, Any]) -> Any:
+        operation = task.get("operation") or task.get("type") or "noop"
+        if operation == "universe.start":
+            return start_universe()
+        if operation == "universe.tick":
+            return tick_universe(task.get("payload") if isinstance(task.get("payload"), Mapping) else task)
+        if operation == "universe.state":
+            return get_universe_state()
+        if operation == "universe.umbrella":
+            return get_umbrella_status()
+        if str(operation).startswith("substrate."):
+            normalized = dict(task)
+            normalized["operation"] = operation
+            return self.substrate_surface.execute(normalized)
+        return {"operation": operation, "accepted": True, "payload": task.get("payload", {})}

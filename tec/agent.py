@@ -19,6 +19,7 @@ class AgentCapability(Enum):
     COMPUTE = "compute"
     COORDINATE = "coordinate"
     MONITOR = "monitor"
+    EXECUTE = "execute"
 
 
 class AgentState(Enum):
