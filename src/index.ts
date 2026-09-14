@@ -25,6 +25,16 @@ type KernelResult = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+// ⭐ ROOT ROUTE — this fixes the 404 at /
+app.get('/', (c) => {
+  return c.json({
+    status: 'Portal‑OS live',
+    worker: 'plantetary-max',
+    mode: c.env.PLANETARY_MODE,
+    umbrella: c.env.UMBRELLA_ENFORCEMENT
+  });
+});
+
 app.get('/health', (c) => c.json({ status: 'ok', service: 'portal-os-worker' }));
 
 app.post('/api/kernel/message', async (c) => {
