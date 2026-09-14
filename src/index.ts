@@ -31,14 +31,45 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 // ⭐ ROOT ROUTE — fixes 404 and confirms Worker identity
 app.get('/', (c) => {
-  return c.json({
-    message: 'Heloworld',
-    worker: 'Planetary-Max',
-    mode: c.env.PLANETARY_MODE,
-    umbrella: c.env.UMBRELLA_ENFORCEMENT,
-    module: c.env.MAXOS_MODULE
-  });
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Planetary‑Max UI</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: #0b0b0c;
+            color: #e6e6e6;
+            padding: 40px;
+          }
+          h1 {
+            font-size: 2.4rem;
+            margin-bottom: 10px;
+          }
+          .card {
+            background: #1a1a1d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Planetary‑Max</h1>
+        <div class="card">
+          <p><strong>Worker:</strong> planetary-max</p>
+          <p><strong>Mode:</strong> ${c.env.PLANETARY_MODE}</p>
+          <p><strong>Umbrella:</strong> ${c.env.UMBRELLA_ENFORCEMENT}</p>
+          <p><strong>Module:</strong> ${c.env.MAXOS_MODULE}</p>
+        </div>
+      </body>
+    </html>
+  `);
 });
+
+
 
 app.get('/health', (c) => c.json({ status: 'ok', service: 'portal-os-worker' }));
 
