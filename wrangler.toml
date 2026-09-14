@@ -2,37 +2,10 @@ name = "portal-os"
 main = "src/index.ts"
 compatibility_date = "2024-09-01"
 
-# Planetary mode: Portal-OS hosting multiple MAX-OS universes
 [vars]
-PLANETARY_MODE = "federated"
+PLANETARY_MODE = "single"
 UMBRELLA_ENFORCEMENT = "strict"
-MAXOS_MODULE = "local"   # or remote URL/service if available
+MAXOS_MODULE = "local"
 
-# Durable Objects for planetary substrate + federation
-[[durable_objects]]
-bindings = [
-  { name = "PLANETARY_UNIVERSE_DO", class_name = "PlanetaryUniverseDO" },
-  { name = "PLANET_REGISTRY_DO", class_name = "PlanetRegistryDO" },
-  { name = "FEDERATION_DO", class_name = "FederationDO" }
-]
-
-# DO classes location
 [build]
 command = "npm run build"
-
-# KV namespaces for substrate + universe state
-[[kv_namespaces]]
-binding = "substrate_kv"
-id = "YOUR_SUBSTRATE_KV_ID"
-
-[[kv_namespaces]]
-binding = "universe_state_kv"
-id = "YOUR_UNIVERSE_STATE_KV_ID"
-
-[[kv_namespaces]]
-binding = "umbrella_kv"
-id = "YOUR_UMBRELLA_KV_ID"
-
-# Node compatibility for Worker
-[worker]
-compatibility_flags = ["nodejs_compat"]
