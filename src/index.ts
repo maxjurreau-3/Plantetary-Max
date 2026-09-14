@@ -29,7 +29,7 @@ type KernelResult = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// ⭐ ROOT ROUTE — fixes 404 and confirms Worker identity
+// ⭐ ROOT ROUTE — Planetary‑Max UI
 app.get('/', (c) => {
   return c.html(`
     <!DOCTYPE html>
@@ -54,6 +54,10 @@ app.get('/', (c) => {
             border-radius: 8px;
             margin-top: 20px;
           }
+          a {
+            color: #4da3ff;
+            text-decoration: none;
+          }
         </style>
       </head>
       <body>
@@ -64,12 +68,62 @@ app.get('/', (c) => {
           <p><strong>Umbrella:</strong> ${c.env.UMBRELLA_ENFORCEMENT}</p>
           <p><strong>Module:</strong> ${c.env.MAXOS_MODULE}</p>
         </div>
+
+        <div class="card">
+          <p><a href="/max-os-1">Open MAX‑OS‑1 UI →</a></p>
+        </div>
       </body>
     </html>
   `);
 });
 
+// ⭐ MAX‑OS‑1 UI ROUTE
+app.get('/max-os-1', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>MAX‑OS‑1 UI</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: #0b0b0c;
+            color: #e6e6e6;
+            padding: 40px;
+          }
+          h1 {
+            font-size: 2.4rem;
+            margin-bottom: 10px;
+          }
+          .card {
+            background: #1a1a1d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+          }
+          a {
+            color: #4da3ff;
+            text-decoration: none;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>MAX‑OS‑1</h1>
+        <div class="card">
+          <p><strong>System:</strong> MAX‑OS‑1</p>
+          <p><strong>Mode:</strong> ${c.env.PLANETARY_MODE}</p>
+          <p><strong>Umbrella:</strong> ${c.env.UMBRELLA_ENFORCEMENT}</p>
+          <p><strong>Module:</strong> ${c.env.MAXOS_MODULE}</p>
+        </div>
 
+        <div class="card">
+          <p><a href="/">← Back to Planetary‑Max</a></p>
+        </div>
+      </body>
+    </html>
+  `);
+});
 
 app.get('/health', (c) => c.json({ status: 'ok', service: 'portal-os-worker' }));
 
