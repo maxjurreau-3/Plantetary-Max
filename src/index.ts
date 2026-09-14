@@ -29,7 +29,7 @@ type KernelResult = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// ⭐ ROOT ROUTE — fixes 404 and confirms Worker identity
+// ⭐ ROOT ROUTE — Planetary‑Max UI
 app.get('/', (c) => {
   return c.html(`
     <!DOCTYPE html>
@@ -54,6 +54,10 @@ app.get('/', (c) => {
             border-radius: 8px;
             margin-top: 20px;
           }
+          a {
+            color: #4da3ff;
+            text-decoration: none;
+          }
         </style>
       </head>
       <body>
@@ -64,12 +68,215 @@ app.get('/', (c) => {
           <p><strong>Umbrella:</strong> ${c.env.UMBRELLA_ENFORCEMENT}</p>
           <p><strong>Module:</strong> ${c.env.MAXOS_MODULE}</p>
         </div>
+
+        <div class="card">
+          <p><a href="/max-os-1">Open MAX‑OS‑1 Console →</a></p>
+        </div>
       </body>
     </html>
   `);
 });
 
+// ⭐ MAX‑OS‑1 SYSTEM CONSOLE
+app.get('/max-os-1', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>MAX‑OS‑1 Console</title>
+        <style>
+          body {
+            font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+            background: #050608;
+            color: #e6e6e6;
+            padding: 24px;
+          }
+          h1 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+          }
+          .meta {
+            font-size: 0.9rem;
+            color: #9a9a9a;
+            margin-bottom: 16px;
+          }
+          .console {
+            background: #0b0c10;
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid #20222a;
+          }
+          .output {
+            height: 260px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+          }
+          .line {
+            margin-bottom: 4px;
+          }
+          .line span.prompt {
+            color: #4da3ff;
+          }
+          .line span.error {
+            color: #ff4d6a;
+          }
+          .input-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+          }
+          input[type="text"] {
+            flex: 1;
+            background: #050608;
+            border: 1px solid #30323a;
+            border-radius: 4px;
+            padding: 6px 8px;
+            color: #e6e6e6;
+            font-family: inherit;
+            font-size: 0.9rem;
+          }
+          button {
+            background: #4da3ff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            color: #050608;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+          }
+          button:disabled {
+            opacity: 0.6;
+            cursor: default;
+          }
+          a {
+            color: #4da3ff;
+            text-decoration: none;
+            font-size: 0.85rem;
+          }
+          .nav {
+            margin-top: 16px;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>MAX‑OS‑1 Console</h1>
+        <div class="meta">
+          System: MAX‑OS‑1 · Mode: ${c.env.PLANETARY_MODE} · Umbrella: ${c.env.UMBRELLA_ENFORCEMENT} · Module: ${c.env.MAXOS_MODULE}
+        </div>
 
+        <div class="console">
+          <div id="output" class="output">
+            <div class="line">
+              <span class="prompt">max-os-1@kernel</span> boot: console online
+            </div>
+            <div class="line">
+              type a <code>type</code> and optional JSON <code>payload</code>, then press ENTER
+            </div>
+            <div class="line">
+              example: <code>universe.state {"surface":"worker-universe"}</code>
+            </div>
+          </div>
+          <div class="input-row">
+            <input id="command" type="text" placeholder='type payloadJSON (optional)' />
+            <button id="send">SEND</button>
+          </div>
+        </div>
+
+        <div class="nav">
+          <a href="/">← Back to Planetary‑Max</a>
+        </div>
+
+        <script>
+          const outputEl = document.getElementById('output');
+          const commandEl = document.getElementById('command');
+          const sendEl = document.getElementById('send');
+
+          function appendLine(text, opts = {}) {
+            const div = document.createElement('div');
+            div.className = 'line';
+            if (opts.error) {
+              const span = document.createElement('span');
+              span.className = 'error';
+              span.textContent = text;
+              div.appendChild(span);
+            } else if (opts.prompt) {
+              const span = document.createElement('span');
+              span.className = 'prompt';
+              span.textContent = opts.prompt + ' ';
+              div.appendChild(span);
+              div.appendChild(document.createTextNode(text));
+            } else {
+              div.textContent = text;
+            }
+            outputEl.appendChild(div);
+            outputEl.scrollTop = outputEl.scrollHeight;
+          }
+
+          async function sendCommand() {
+            const raw = commandEl.value.trim();
+            if (!raw) return;
+
+            appendLine(raw, { prompt: 'max-os-1>' });
+            commandEl.value = '';
+            sendEl.disabled = true;
+
+            let type = raw;
+            let payload = {};
+
+            const spaceIdx = raw.indexOf(' ');
+            if (spaceIdx !== -1) {
+              type = raw.slice(0, spaceIdx).trim();
+              const payloadStr = raw.slice(spaceIdx + 1).trim();
+              if (payloadStr) {
+                try {
+                  payload = JSON.parse(payloadStr);
+                } catch (e) {
+                  appendLine('payload JSON parse error: ' + e.message, { error: true });
+                  sendEl.disabled = false;
+                  return;
+                }
+              }
+            }
+
+            try {
+              const res = await fetch('/api/kernel/message', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer max-os-1-console'
+                },
+                body: JSON.stringify({
+                  type,
+                  payload,
+                  governanceContext: { surface: 'max-os-1-console' }
+                })
+              });
+
+              const json = await res.json();
+              appendLine('status ' + res.status + ' · ok=' + (json.ok !== false));
+              appendLine(JSON.stringify(json, null, 2));
+            } catch (e) {
+              appendLine('kernel bridge error: ' + e.message, { error: true });
+            } finally {
+              sendEl.disabled = false;
+            }
+          }
+
+          sendEl.addEventListener('click', sendCommand);
+          commandEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              sendCommand();
+            }
+          });
+        </script>
+      </body>
+    </html>
+  `);
+});
 
 app.get('/health', (c) => c.json({ status: 'ok', service: 'portal-os-worker' }));
 
