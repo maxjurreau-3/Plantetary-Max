@@ -9,3 +9,9 @@ MAXOS_MODULE = "local"
 
 [build]
 command = "npm run build"
+
+"scripts": {
+  "build": "tsc",
+  "check": "tsc --noEmit"
+}
+
