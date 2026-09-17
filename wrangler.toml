@@ -3,9 +3,49 @@ main = "src/index.ts"
 compatibility_date = "2024-09-01"
 
 [vars]
-PLANETARY_MODE = "single"
+PLANETARY_MODE = "federated"
 UMBRELLA_ENFORCEMENT = "strict"
-MAXOS_MODULE = "local"
+MAXOS_MODULE = "MAX-OS-1"
+
+[[durable_objects.bindings]]
+name = "KERNEL_DO"
+class_name = "KernelDO"
+
+[[durable_objects.bindings]]
+name = "PROCESS_ENGINE_DO"
+class_name = "ProcessEngineDO"
+
+[[durable_objects.bindings]]
+name = "MODULE_ENGINE_DO"
+class_name = "ModuleEngineDO"
+
+[[durable_objects.bindings]]
+name = "IDENTITY_ENGINE_DO"
+class_name = "IdentityEngineDO"
+
+[[durable_objects.bindings]]
+name = "UMBRELLA_ENGINE_DO"
+class_name = "UmbrellaEngineDO"
+
+[[durable_objects.bindings]]
+name = "UNIVERSE_ENGINE_DO"
+class_name = "UniverseEngineDO"
+
+[[durable_objects.bindings]]
+name = "FEDERATION_DO"
+class_name = "FederationDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = [
+  "KernelDO",
+  "ProcessEngineDO",
+  "ModuleEngineDO",
+  "IdentityEngineDO",
+  "UmbrellaEngineDO",
+  "UniverseEngineDO",
+  "FederationDO"
+]
 
 [build]
 command = "npm run build"

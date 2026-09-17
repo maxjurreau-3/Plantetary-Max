@@ -1,244 +1,151 @@
 import { Hono } from 'hono';
+import { FederationDO } from './federation';
+import { IdentityEngineDO } from './identityEngine';
+import { KernelDO, type PortalBindings } from './kernel';
+import { ModuleEngineDO } from './moduleEngine';
+import { ProcessEngineDO } from './processEngine';
+import {
+  bearerIdentity,
+  createEnvelope,
+  failure,
+  forwardEnvelope,
+  isEnvelope,
+  isRecord,
+  objectStub,
+  type JsonObject,
+  type KernelEnvelope
+} from './protocol';
+import { UmbrellaEngineDO } from './umbrellaEngine';
+import { UniverseEngineDO } from './universeEngine';
+import { maxOsConsole, planetarySurface } from './ui';
 
-type KernelEnvelope = {
-  id: string;
-  type: string;
-  payload: Record<string, unknown>;
-  identity: string;
-  governanceContext: Record<string, unknown>;
-};
+const app = new Hono<{ Bindings: PortalBindings }>();
 
-type KernelService = {
-  fetch(request: Request): Promise<Response>;
-};
+app.get('/', (c) =>
+  c.html(planetarySurface(c.env.PLANETARY_MODE, c.env.UMBRELLA_ENFORCEMENT, c.env.MAXOS_MODULE))
+);
+app.get('/max-os-1', (c) => c.html(maxOsConsole()));
 
-type Bindings = {
-  KERNEL_SERVICE?: KernelService;
-  KERNEL_URL?: string;
-
-  PLANETARY_MODE: string;
-  UMBRELLA_ENFORCEMENT: string;
-  MAXOS_MODULE: string;
-};
-
-type KernelResult = {
-  ok?: boolean;
-  error?: { code?: string; message?: string };
-  [key: string]: unknown;
-};
-
-const app = new Hono<{ Bindings: Bindings }>();
-
-// ⭐ ROOT ROUTE — fixes 404 and confirms Worker identity
-app.get('/', (c) => {
-  return c.html(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8" />
-        <title>Planetary‑Max UI</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            background: #0b0b0c;
-            color: #e6e6e6;
-            padding: 40px;
-          }
-          h1 {
-            font-size: 2.4rem;
-            margin-bottom: 10px;
-          }
-          .card {
-            background: #1a1a1d;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-          }
-        </style>
-      </head>
-      <body>
-        <h1>Planetary‑Max</h1>
-        <div class="card">
-          <p><strong>Worker:</strong> planetary-max</p>
-          <p><strong>Mode:</strong> ${c.env.PLANETARY_MODE}</p>
-          <p><strong>Umbrella:</strong> ${c.env.UMBRELLA_ENFORCEMENT}</p>
-          <p><strong>Module:</strong> ${c.env.MAXOS_MODULE}</p>
-        </div>
-      </body>
-    </html>
-  `);
+app.get('/health', async (c) => {
+  const readOnlyHealth = Boolean(c.env.PORTAL_HEALTH_TOKEN);
+  const envelope = createEnvelope(
+    'kernel.ping',
+    {},
+    readOnlyHealth ? 'portal-os.health' : 'portal-worker',
+    { surface: 'health', authenticated: true }
+  );
+  let reachable = false;
+  try {
+    const response = await forwardEnvelope(
+      objectStub(c.env.KERNEL_DO),
+      envelope,
+      readOnlyHealth ? { 'X-Portal-Health-Token': c.env.PORTAL_HEALTH_TOKEN as string } : {}
+    );
+    reachable = response.ok;
+  } catch (error) {
+    console.error('Portal-OS health check could not reach KernelDO', error);
+  }
+  return Response.json(
+    {
+      status: reachable ? 'ok' : 'degraded',
+      service: 'Portal-OS Worker',
+      kernel: reachable ? 'online' : 'unavailable'
+    },
+    { status: reachable ? 200 : 503 }
+  );
 });
 
-
-
-app.get('/health', (c) => c.json({ status: 'ok', service: 'portal-os-worker' }));
-
 app.post('/api/kernel/message', async (c) => {
-  const identity = bearerToken(c.req.header('Authorization'));
-  if (!identity) {
-    return c.json(
-      { ok: false, error: { code: 'UNAUTHENTICATED', message: 'Bearer token required' } },
-      401
-    );
-  }
+  const authenticatedIdentity = await bearerIdentity(c.req.header('Authorization') ?? null, c.env);
+  if (!authenticatedIdentity) return failure('UNAUTHENTICATED', 'Valid bearer credential required', 401);
 
   let body: unknown;
   try {
     body = await c.req.json();
   } catch {
-    return c.json(
-      { ok: false, error: { code: 'INVALID_JSON', message: 'Request body must be JSON' } },
-      400
-    );
+    return failure('INVALID_JSON', 'Request body must be valid JSON', 400);
   }
 
-  if (!isRecord(body) || typeof body.type !== 'string') {
-    return c.json(
-      { ok: false, error: { code: 'INVALID_MESSAGE', message: 'type and object payload are required' } },
-      400
+  let envelope: KernelEnvelope;
+  if (isEnvelope(body)) {
+    if (body.identity !== authenticatedIdentity) {
+      return failure('IDENTITY_MISMATCH', 'Envelope identity must match the bearer identity', 403);
+    }
+    envelope = {
+      ...body,
+      governanceContext: { ...body.governanceContext, authenticated: true }
+    };
+  } else if (
+    isRecord(body) &&
+    typeof body.type === 'string' &&
+    !('id' in body) &&
+    !('identity' in body)
+  ) {
+    if (body.payload !== undefined && !isRecord(body.payload)) {
+      return failure('INVALID_MESSAGE', 'payload must be an object', 400);
+    }
+    envelope = createEnvelope(
+      body.type,
+      body.payload === undefined ? {} : body.payload as JsonObject,
+      authenticatedIdentity,
+      { ...(isRecord(body.governanceContext) ? body.governanceContext : {}), authenticated: true }
     );
+  } else {
+    return failure('INVALID_ENVELOPE', 'A complete envelope or type with object payload is required', 400);
   }
 
-  const payload = body.payload === undefined ? {} : body.payload;
-  if (!isRecord(payload)) {
-    return c.json(
-      { ok: false, error: { code: 'INVALID_MESSAGE', message: 'type and object payload are required' } },
-      400
-    );
+  try {
+    return await forwardEnvelope(objectStub(c.env.KERNEL_DO), envelope);
+  } catch (error) {
+    console.error('Portal-OS Worker could not reach KernelDO', error);
+    return failure('KERNEL_UNAVAILABLE', 'KernelDO is unavailable', 503, envelope);
   }
-
-  const envelope = createEnvelope(
-    body.type,
-    payload,
-    identity,
-    isRecord(body.governanceContext) ? body.governanceContext : {}
-  );
-
-  return kernelResponse(c.env, envelope);
 });
 
-app.get('/universe/state', async (c) =>
-  universeRequest(c.env, c.req.header('Authorization'), 'universe.state', {})
-);
-
-app.get('/universe/umbrella', async (c) =>
-  universeRequest(c.env, c.req.header('Authorization'), 'universe.umbrella', {})
-);
-
+app.get('/universe/state', (c) => authenticatedOperation(c.env, c.req.header('Authorization'), 'universe.state', {}));
+app.get('/universe/umbrella', (c) => authenticatedOperation(c.env, c.req.header('Authorization'), 'universe.umbrella', {}));
 app.post('/universe/tick', async (c) => {
-  let payload: Record<string, unknown> = {};
-  const contentType = c.req.header('Content-Type') ?? '';
-
-  if (contentType.includes('application/json')) {
+  let payload: JsonObject = {};
+  if ((c.req.header('Content-Type') ?? '').includes('application/json')) {
     try {
       const body: unknown = await c.req.json();
-      if (!isRecord(body)) {
-        return c.json(
-          { ok: false, error: { code: 'INVALID_JSON', message: 'Tick payload must be an object' } },
-          400
-        );
-      }
+      if (!isRecord(body)) return failure('INVALID_JSON', 'Tick payload must be an object', 400);
       payload = body;
     } catch {
-      return c.json(
-        { ok: false, error: { code: 'INVALID_JSON', message: 'Request body must be JSON' } },
-        400
-      );
+      return failure('INVALID_JSON', 'Request body must be valid JSON', 400);
     }
   }
-
-  return universeRequest(c.env, c.req.header('Authorization'), 'universe.tick', payload);
+  return authenticatedOperation(c.env, c.req.header('Authorization'), 'universe.tick', payload);
 });
 
-async function universeRequest(
-  env: Bindings,
+async function authenticatedOperation(
+  env: PortalBindings,
   authorization: string | undefined,
   type: string,
-  payload: Record<string, unknown>
+  payload: JsonObject
 ): Promise<Response> {
-  const identity = bearerToken(authorization);
-  if (!identity) {
-    return Response.json(
-      { ok: false, error: { code: 'UNAUTHENTICATED', message: 'Bearer token required' } },
-      { status: 401 }
-    );
-  }
-
-  return kernelResponse(
-    env,
-    createEnvelope(type, payload, identity, { surface: 'worker-universe' })
-  );
-}
-
-function createEnvelope(
-  type: string,
-  payload: Record<string, unknown>,
-  identity: string,
-  governanceContext: Record<string, unknown>
-): KernelEnvelope {
-  return {
-    id: crypto.randomUUID(),
-    type,
-    payload,
-    identity,
-    governanceContext
-  };
-}
-
-async function kernelResponse(env: Bindings, envelope: KernelEnvelope): Promise<Response> {
-  try {
-    const response = await callKernel(env, envelope);
-    const result = await response.json<KernelResult>();
-    const status =
-      result.ok === false ? kernelErrorStatus(result.error?.code) : response.status;
-
-    return Response.json(result, { status });
-  } catch (error) {
-    console.error('Worker to kernel bridge failed', error);
-    return Response.json(
-      {
-        ok: false,
-        error: { code: 'KERNEL_UNAVAILABLE', message: 'Kernel bridge unavailable' }
-      },
-      { status: 503 }
-    );
-  }
-}
-
-async function callKernel(env: Bindings, envelope: KernelEnvelope): Promise<Response> {
-  const body = JSON.stringify(envelope);
-
-  const request = new Request('http://kernel/api/kernel/message', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body
+  const identity = await bearerIdentity(authorization ?? null, env);
+  if (!identity) return failure('UNAUTHENTICATED', 'Valid bearer credential required', 401);
+  const envelope = createEnvelope(type, payload, identity, {
+    surface: 'Planetary-Max',
+    authenticated: true
   });
-
-  if (env.KERNEL_SERVICE) return env.KERNEL_SERVICE.fetch(request);
-
-  if (env.KERNEL_URL) {
-    const target = `${env.KERNEL_URL.replace(/\/$/, '')}/api/kernel/message`;
-    return fetch(target, { method: 'POST', headers: request.headers, body });
+  try {
+    return await forwardEnvelope(objectStub(env.KERNEL_DO), envelope);
+  } catch {
+    return failure('KERNEL_UNAVAILABLE', 'KernelDO is unavailable', 503, envelope);
   }
-
-  throw new Error('Configure KERNEL_SERVICE or KERNEL_URL');
 }
 
-function bearerToken(header: string | undefined): string | null {
-  const match = /^Bearer\s+(.+)$/i.exec(header ?? '');
-  return match?.[1]?.trim() || null;
-}
-
-function kernelErrorStatus(code: string | undefined): number {
-  if (code === 'UNAUTHENTICATED') return 401;
-  if (code === 'FORBIDDEN') return 403;
-  if (code === 'INVALID_MESSAGE' || code === 'INVALID_JSON') return 400;
-  return 500;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export { app, createEnvelope };
+export {
+  app,
+  createEnvelope,
+  FederationDO,
+  IdentityEngineDO,
+  KernelDO,
+  ModuleEngineDO,
+  ProcessEngineDO,
+  UmbrellaEngineDO,
+  UniverseEngineDO
+};
 export default app;
