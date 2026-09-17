@@ -1,4 +1,4 @@
-name = "planetary-max"
+name = "plantetary-max"
 main = "src/index.ts"
 compatibility_date = "2024-09-01"
 
@@ -6,6 +6,3 @@ compatibility_date = "2024-09-01"
 PLANETARY_MODE = "single"
 UMBRELLA_ENFORCEMENT = "strict"
 MAXOS_MODULE = "local"
-
-[build]
-command = "npm run build"
